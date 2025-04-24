@@ -64,11 +64,20 @@
 
             dontUnpack = true;
 
-            installPhase = ''
-              mkdir -p $out/bin
-              cp $src $out/bin/spectral
-              chmod +x $out/bin/spectral
-            '';
+            installPhase =
+              ''
+                mkdir -p $out/bin
+                cp $src $out/bin/spectral
+                chmod +x $out/bin/spectral
+              ''
+              + pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+                install_name_tool \
+                  -change /usr/lib/libc++.1.dylib '${pkgs.stdenv.cc.libcxx}/lib/libc++.1.dylib' \
+                  -change /usr/lib/libSystem.B.dylib ${pkgs.darwin.Libsystem}/lib/libSystem.B.dylib \
+                  -change /usr/lib/libz.1.dylib '${pkgs.lib.getLib pkgs.zlib}/lib/libz.1.dylib' \
+                  -change ${pkgs.darwin.CF}/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation \
+                  $out/bin/spectral
+              '';
 
             dontStrip = true;
 
