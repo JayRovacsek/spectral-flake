@@ -123,11 +123,11 @@
               buildPhase = ''
                 ${pkgs.coreutils}/bin/mkdir -p $out
                 export HOME=$(mktemp -d)
-                ${pkgs.yarn-berry}/bin/yarnconfig set enableTelemetry false
-                ${pkgs.yarn-berry}/bin/yarnconfig set cacheFolder $out
-                ${pkgs.yarn-berry}/bin/yarnconfig set enableGlobalCache false
-                ${pkgs.yarn-berry}/bin/yarnconfig set supportedArchitectures --json '${supportedArchitectures}'
-                ${pkgs.yarn-berry}/bin/yarninstall --immutable --mode=skip-build
+                ${pkgs.yarn-berry}/bin/yarn config set enableTelemetry false
+                ${pkgs.yarn-berry}/bin/yarn config set cacheFolder $out
+                ${pkgs.yarn-berry}/bin/yarn config set enableGlobalCache false
+                ${pkgs.yarn-berry}/bin/yarn config set supportedArchitectures --json '${supportedArchitectures}'
+                ${pkgs.yarn-berry}/bin/yarn install --immutable --mode=skip-build
 
                 runHook postBuild
               '';
