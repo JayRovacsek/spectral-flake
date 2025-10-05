@@ -131,7 +131,8 @@
             };
           in
           {
-            inherit offlineCache;
+            default = self.packages.${system}.spectral-cli;
+
             spectral-cli = pkgs.stdenv.mkDerivation {
               inherit pname src version;
 
@@ -180,8 +181,6 @@
                 runHook postInstall
               '';
             };
-
-            default = self.packages.${system}.spectral-cli;
           };
       }
     );
