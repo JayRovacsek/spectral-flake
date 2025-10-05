@@ -75,9 +75,9 @@
 
         packages =
           let
-
             pname = "spectral-cli";
             version = "6.15.0";
+
             src = pkgs.fetchFromGitHub {
               owner = "stoplightio";
               repo = "spectral";
