@@ -179,6 +179,9 @@
 
                 ${pkgs.coreutils}/bin/chmod +x $out/share/spectral/packages/cli/dist/index.js
 
+                substituteInPlace  $out/share/spectral/packages/cli/dist/index.js \
+                  --replace-fail "#!/usr/bin/env node" "#!${pkgs.nodejs}/bin/node"
+
                 makeWrapper $out/share/spectral/packages/cli/dist/index.js "$out/bin/spectral" \
                 --set PATH ${
                   pkgs.lib.makeBinPath [
