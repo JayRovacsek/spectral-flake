@@ -103,15 +103,7 @@
         devShells.default = pkgs.devshell.mkShell {
           devshell.startup.git-hooks.text = self.checks.${system}.git-hooks.shellHook;
           name = "spectral cli shell";
-          packages =
-            (with pkgs; [
-              actionlint
-              deadnix
-              nixfmt-rfc-style
-              prettier
-              statix
-            ])
-            ++ (with self.packages.${system}; [ spectral-cli ]);
+          packages = self.checks.${system}.git-hooks.enabledPackages;
         };
 
         packages = {
