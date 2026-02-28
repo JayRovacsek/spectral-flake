@@ -1,5 +1,5 @@
 {
-  description = "A flake that downloads Spectral CLI binary";
+  description = "A flake that builds Spectral CLI from source";
 
   inputs = {
     devshell = {
@@ -8,191 +8,85 @@
     };
 
     flake-utils.url = "github:numtide/flake-utils";
-
-    git-hooks = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:cachix/git-hooks.nix";
+    spectral = {
+      url = "github:stoplightio/spectral";
+      flake = false;
     };
-
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs =
     {
-      self,
-      devshell,
-      flake-utils,
-      git-hooks,
       nixpkgs,
+      flake-utils,
+      spectral,
+      ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = import nixpkgs {
-          overlays = [ devshell.overlays.default ];
-          inherit system;
+        pkgs = nixpkgs.legacyPackages.${system};
+
+        yarnDeps = pkgs.stdenv.mkDerivation {
+          pname = "spectral-deps";
+          version = "git";
+          src = spectral;
+
+          nativeBuildInputs = [
+            pkgs.yarn-berry
+            pkgs.nodejs
+            pkgs.cacert
+          ];
+
+          buildPhase = ''
+            export HOME=$(mktemp -d)
+            export NODE_EXTRA_CA_CERTS=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+            export YARN_ENABLE_TELEMETRY=0
+            export YARN_ENABLE_GLOBAL_CACHE=false
+            export YARN_CACHE_FOLDER=$out
+            yarn install --immutable
+          '';
+
+          installPhase = "true";
+
+          outputHashAlgo = "sha256";
+          outputHashMode = "recursive";
+          outputHash = "sha256-ZdwfiXDp3raLxPVywPxyndwviPiMtKFxQV1v3Ptu26E=";
         };
+
       in
       {
-        checks.git-hooks = git-hooks.lib.${system}.run {
-          src = self;
-          hooks = {
-            actionlint.enable = true;
+        packages.default = pkgs.stdenv.mkDerivation {
+          pname = "spectral-cli";
+          version = "git";
+          src = spectral;
 
-            deadnix = {
-              enable = true;
-              settings.edit = true;
-            };
+          nativeBuildInputs = [
+            pkgs.yarn-berry
+            pkgs.nodejs
+            pkgs.makeWrapper
+          ];
 
-            nixfmt-rfc-style = {
-              enable = true;
-              package = pkgs.nixfmt-rfc-style;
-              settings.width = 120;
-            };
+          buildPhase = ''
+            export HOME=$(mktemp -d)
+            export YARN_ENABLE_TELEMETRY=0
+            export YARN_ENABLE_GLOBAL_CACHE=false
+            export YARN_CACHE_FOLDER=${yarnDeps}
+            yarn install --immutable --immutable-cache
 
-            prettier = {
-              enable = true;
-              settings.write = true;
-            };
+            # Now build the project
+            yarn build
+          '';
 
-            statix.enable = true;
+          installPhase = ''
+            mkdir -p $out/bin
+            mkdir -p $out/libexec/spectral
 
-            statix-write = {
-              enable = true;
-              name = "Statix Write";
-              entry = "${pkgs.statix}/bin/statix fix";
-              language = "system";
-              pass_filenames = false;
-            };
-          };
+            cp -r . $out/libexec/spectral
+
+            makeWrapper ${pkgs.nodejs}/bin/node $out/bin/spectral \
+              --add-flags "$out/libexec/spectral/packages/cli/dist/index.js"
+          '';
         };
-
-        devShells.default = pkgs.devshell.mkShell {
-          devshell.startup.git-hooks.text = self.checks.${system}.git-hooks.shellHook;
-          name = "spectral cli shell";
-          packages =
-            (with pkgs; [
-              actionlint
-              deadnix
-              nixfmt-rfc-style
-              prettier
-              statix
-            ])
-            ++ (with self.packages.${system}; [ spectral-cli ]);
-        };
-
-        packages =
-          let
-            pname = "spectral-cli";
-            version = "6.15.0";
-
-            src = pkgs.fetchFromGitHub {
-              owner = "stoplightio";
-              repo = "spectral";
-              tag = "v${version}";
-              hash = "sha256-6ywvyZe0ol2B7ZMS/9zWkDKu4u/9dh2fsPegJ6FlLAs=";
-            };
-
-            supportedArchitectures = builtins.toJSON {
-              os = [
-                "darwin"
-                "linux"
-              ];
-              cpu = [
-                "x64"
-                "arm64"
-              ];
-              libc = [
-                "glibc"
-                "musl"
-              ];
-            };
-
-            offlineCache = pkgs.stdenv.mkDerivation {
-              name = "yarn-offline-cache";
-              inherit src;
-
-              env.CI = "1";
-
-              nativeBuildInputs = with pkgs; [
-                cacert
-                gitMinimal
-                yarn
-              ];
-
-              buildPhase = ''
-                ${pkgs.coreutils}/bin/mkdir -p $out
-                export HOME=$(mktemp -d)
-                ${pkgs.yarn-berry}/bin/yarn config set enableTelemetry false
-                ${pkgs.yarn-berry}/bin/yarn config set cacheFolder $out
-                ${pkgs.yarn-berry}/bin/yarn config set enableGlobalCache false
-                ${pkgs.yarn-berry}/bin/yarn config set supportedArchitectures --json '${supportedArchitectures}'
-                ${pkgs.yarn-berry}/bin/yarn install --immutable --mode=skip-build
-
-                runHook postBuild
-              '';
-
-              dontInstall = true;
-
-              outputHashMode = "recursive";
-              outputHash = "sha256-e5wL6VLr0gzLGWExW507bwHD8hTa4wTxwyzC6xoAUcw=";
-            };
-          in
-          {
-            default = self.packages.${system}.spectral-cli;
-
-            spectral-cli = pkgs.stdenv.mkDerivation {
-              inherit pname src version;
-
-              env.CI = "1";
-
-              strictDeps = true;
-
-              nativeBuildInputs = with pkgs; [
-                makeWrapper
-                yarn-berry
-              ];
-
-              configurePhase = ''
-                runHook preConfigure
-
-                export HOME=$(mktemp -d)
-                ${pkgs.yarn-berry}/bin/yarn config set enableTelemetry false
-                ${pkgs.yarn-berry}/bin/yarn config set enableGlobalCache false
-                ${pkgs.yarn-berry}/bin/yarn config set cacheFolder ${offlineCache}
-                ${pkgs.yarn-berry}/bin/yarn install
-
-                runHook postConfigure
-              '';
-
-              buildPhase = ''
-                runHook preBuild
-                ${pkgs.yarn-berry}/bin/yarn run build
-                runHook postBuild
-              '';
-
-              installPhase = ''
-                runHook preInstall
-
-                ${pkgs.coreutils}/bin/mkdir -p "$out/share"
-                ${pkgs.coreutils}/bin/cp -r . "$out/share/spectral"
-
-                ${pkgs.coreutils}/bin/chmod +x $out/share/spectral/packages/cli/dist/index.js
-
-                substituteInPlace  $out/share/spectral/packages/cli/dist/index.js \
-                  --replace-fail "#!/usr/bin/env node" "#!${pkgs.nodejs}/bin/node"
-
-                makeWrapper $out/share/spectral/packages/cli/dist/index.js "$out/bin/spectral" \
-                --set PATH ${
-                  pkgs.lib.makeBinPath [
-                    pkgs.nodejs
-                  ]
-                }
-
-                runHook postInstall
-              '';
-            };
-          };
       }
     );
 }
