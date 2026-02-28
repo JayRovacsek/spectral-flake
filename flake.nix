@@ -8,6 +8,12 @@
     };
 
     flake-utils.url = "github:numtide/flake-utils";
+
+    git-hooks = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:cachix/git-hooks.nix";
+    };
+
     spectral = {
       url = "github:stoplightio/spectral";
       flake = false;
@@ -16,15 +22,21 @@
 
   outputs =
     {
-      nixpkgs,
+      devshell,
       flake-utils,
+      git-hooks,
+      nixpkgs,
+      self,
       spectral,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs {
+          overlays = [ devshell.overlays.default ];
+          inherit system;
+        };
 
         yarnDeps = pkgs.stdenv.mkDerivation {
           pname = "spectral-deps";
@@ -55,37 +67,88 @@
 
       in
       {
-        packages.default = pkgs.stdenv.mkDerivation {
-          pname = "spectral-cli";
-          version = "git";
-          src = spectral;
+        checks.git-hooks = git-hooks.lib.${system}.run {
+          src = self;
+          hooks = {
+            actionlint.enable = true;
 
-          nativeBuildInputs = [
-            pkgs.yarn-berry
-            pkgs.nodejs
-            pkgs.makeWrapper
-          ];
+            deadnix = {
+              enable = true;
+              settings.edit = true;
+            };
 
-          buildPhase = ''
-            export HOME=$(mktemp -d)
-            export YARN_ENABLE_TELEMETRY=0
-            export YARN_ENABLE_GLOBAL_CACHE=false
-            export YARN_CACHE_FOLDER=${yarnDeps}
-            yarn install --immutable --immutable-cache
+            nixfmt-rfc-style = {
+              enable = true;
+              package = pkgs.nixfmt-rfc-style;
+              settings.width = 120;
+            };
 
-            # Now build the project
-            yarn build
-          '';
+            prettier = {
+              enable = true;
+              settings.write = true;
+            };
 
-          installPhase = ''
-            mkdir -p $out/bin
-            mkdir -p $out/libexec/spectral
+            statix.enable = true;
 
-            cp -r . $out/libexec/spectral
+            statix-write = {
+              enable = true;
+              name = "Statix Write";
+              entry = "${pkgs.statix}/bin/statix fix";
+              language = "system";
+              pass_filenames = false;
+            };
+          };
+        };
 
-            makeWrapper ${pkgs.nodejs}/bin/node $out/bin/spectral \
-              --add-flags "$out/libexec/spectral/packages/cli/dist/index.js"
-          '';
+        devShells.default = pkgs.devshell.mkShell {
+          devshell.startup.git-hooks.text = self.checks.${system}.git-hooks.shellHook;
+          name = "spectral cli shell";
+          packages =
+            (with pkgs; [
+              actionlint
+              deadnix
+              nixfmt-rfc-style
+              prettier
+              statix
+            ])
+            ++ (with self.packages.${system}; [ spectral-cli ]);
+        };
+
+        packages = {
+          default = self.packages.${system}.spectral-cli;
+
+          spectral-cli = pkgs.stdenv.mkDerivation {
+            pname = "spectral-cli";
+            version = "git";
+            src = spectral;
+
+            nativeBuildInputs = [
+              pkgs.yarn-berry
+              pkgs.nodejs
+              pkgs.makeWrapper
+            ];
+
+            buildPhase = ''
+              export HOME=$(mktemp -d)
+              export YARN_ENABLE_TELEMETRY=0
+              export YARN_ENABLE_GLOBAL_CACHE=false
+              export YARN_CACHE_FOLDER=${yarnDeps}
+              yarn install --immutable --immutable-cache
+
+              # Now build the project
+              yarn build
+            '';
+
+            installPhase = ''
+              mkdir -p $out/bin
+              mkdir -p $out/libexec/spectral
+
+              cp -r . $out/libexec/spectral
+
+              makeWrapper ${pkgs.nodejs}/bin/node $out/bin/spectral \
+                --add-flags "$out/libexec/spectral/packages/cli/dist/index.js"
+            '';
+          };
         };
       }
     );
