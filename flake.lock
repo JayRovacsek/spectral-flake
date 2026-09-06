@@ -121,11 +121,11 @@
     "spectral": {
       "flake": false,
       "locked": {
-        "lastModified": 1780993943,
-        "narHash": "sha256-GOVlpf4iFzlQbQmeDVGmaxpB4MvDVEMolgbci/0Hkwg=",
+        "lastModified": 1788635559,
+        "narHash": "sha256-S4qTw84GOOBlzR/o8gtrf0AKeUMh2qAeu4ZQnHe7Fho=",
         "owner": "stoplightio",
         "repo": "spectral",
-        "rev": "a7ac8491b3bab4a71bccf523ad53c7a7fbdb5d96",
+        "rev": "22bb13ff1b5c0e0213e5c9e3aed03b784ca0bfcb",
         "type": "github"
       },
       "original": {
